@@ -1,0 +1,25 @@
+# Telegram session blobs — NEVER commit (full account takeover if leaked)
+*.session
+*.session-journal
+*.lock
+sessions/
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Node (defensive, in case tooling added)
+node_modules/
+
+# Editor/OS
+.DS_Store

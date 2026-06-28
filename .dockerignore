@@ -1,0 +1,24 @@
+# Keep secrets and machine-local state OUT of the build context / image layers
+*.session
+*.session-journal
+*.lock
+sessions/
+.env
+.env.*
+!.env.example
+
+# VCS / CI / docs — not needed in the image
+.git/
+.github/
+README.md
+
+# Python caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+
+# Node (defensive)
+node_modules/
