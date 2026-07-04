@@ -1046,6 +1046,70 @@ async def list_topics(
         )
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Toggle Forum", openWorldHint=True, destructiveHint=True, idempotentHint=True
+    )
+)
+@validate_id("chat_id")
+async def toggle_forum(chat_id: Union[int, str], enabled: bool, tabs: bool = False) -> str:
+    """
+    Enable or disable forum topics (the "Topics" feature) on a supergroup.
+
+    Preconditions (enforced before the call; a clean error is returned otherwise):
+      - The target must already be a supergroup (megagroup). A basic group must be
+        migrated to a supergroup first.
+      - The logged-in account must be the CREATOR/owner of the supergroup. A plain
+        admin cannot toggle this (Telegram returns CHAT_ADMIN_REQUIRED).
+
+    Args:
+        chat_id: ID or username of the target supergroup.
+        enabled: True to enable forum topics, False to disable.
+        tabs: Forum layout when enabling — True for the tabbed UI, False for the
+            classic list view (default). Ignored when disabling. Requires the
+            server's Telethon >= 1.44 (the tabs parameter is mandatory in
+            channels.toggleForum on that version).
+    """
+    log_tool_call("toggle_forum", chat_id=chat_id, enabled=enabled, tabs=tabs)
+    try:
+        entity = await client.get_entity(chat_id)
+
+        # Precondition 1: must be a supergroup (megagroup Channel).
+        if not isinstance(entity, Channel) or not getattr(entity, "megagroup", False):
+            return (
+                "Cannot toggle forum: the target is not a supergroup. Forum topics "
+                "can only be toggled on a supergroup — migrate a basic group first."
+            )
+
+        # Precondition 2: the logged-in account must be the creator/owner.
+        if not getattr(entity, "creator", False):
+            return (
+                "Cannot toggle forum: this account is not the creator/owner of the "
+                "supergroup. Toggling forum topics requires owner rights; a plain "
+                "admin cannot do it."
+            )
+
+        try:
+            await client(
+                functions.channels.ToggleForumRequest(
+                    channel=entity, enabled=enabled, tabs=tabs
+                )
+            )
+        except telethon.errors.rpcerrorlist.ChatNotModifiedError:
+            state = "enabled" if enabled else "disabled"
+            return f"Forum topics already {state} for chat {chat_id}; no change made."
+
+        state = "enabled" if enabled else "disabled"
+        return f"Forum topics {state} for chat {chat_id}."
+    except Exception as e:
+        logger.exception(
+            f"toggle_forum failed (chat_id={chat_id}, enabled={enabled}, tabs={tabs})"
+        )
+        return log_and_format_error(
+            "toggle_forum", e, chat_id=chat_id, enabled=enabled, tabs=tabs
+        )
+
+
 @mcp.tool(annotations=ToolAnnotations(title="List Chats", openWorldHint=True, readOnlyHint=True))
 async def list_chats(chat_type: str = None, limit: int = 20) -> str:
     """
