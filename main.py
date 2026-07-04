@@ -2367,6 +2367,7 @@ async def promote_admin(
                 "add_admins": False,
                 "anonymous": False,
                 "manage_call": True,
+                "manage_topics": True,
                 "other": True,
             }
 
@@ -2381,6 +2382,7 @@ async def promote_admin(
             add_admins=rights.get("add_admins", False),
             anonymous=rights.get("anonymous", False),
             manage_call=rights.get("manage_call", True),
+            manage_topics=rights.get("manage_topics", True),
             other=rights.get("other", True),
         )
 
