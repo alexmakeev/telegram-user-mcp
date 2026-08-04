@@ -1,8 +1,12 @@
-dotenv>=0.9.9
-httpx>=0.28.1
-mcp[cli]>=1.4.1
-nest-asyncio>=1.6.0
-python-dotenv>=1.1.0
-python-json-logger>=3.3.0
-segno>=1.6.1
-telethon>=1.44.0
+# Direct dependencies pinned to the known-good versions from the last healthy
+# image (ghcr.io ...ba5a4c5c). Exact pins keep the build reproducible: an
+# unpinned `mcp` had drifted to a release without `mcp.server.fastmcp`, crash-
+# looping fresh images. Bump deliberately, not implicitly.
+dotenv==0.9.9
+httpx==0.28.1
+mcp[cli]==1.28.1
+nest-asyncio==1.6.0
+python-dotenv==1.2.2
+python-json-logger==4.1.0
+segno==1.6.6
+telethon==1.44.0
