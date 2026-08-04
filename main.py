@@ -1110,6 +1110,100 @@ async def toggle_forum(chat_id: Union[int, str], enabled: bool, tabs: bool = Fal
         )
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Create Forum Topic",
+        openWorldHint=True,
+        destructiveHint=True,
+        idempotentHint=False,
+    )
+)
+@validate_id("chat_id")
+async def create_forum_topic(chat_id: Union[int, str], title: str) -> str:
+    """
+    Create a new forum topic inside a supergroup that has the forum ("Topics")
+    feature enabled.
+
+    Preconditions (enforced before the call; a clean error is returned otherwise):
+      - The target must be a supergroup (megagroup) with forum topics enabled
+        (enable them first with toggle_forum if needed).
+      - The logged-in account must have the rights to manage topics. The
+        creator/owner always does; an account without that right gets
+        CHAT_ADMIN_REQUIRED from Telegram.
+
+    Args:
+        chat_id: ID or username of the target forum supergroup.
+        title: Title for the new topic (non-empty; Telegram limit is 128 chars).
+
+    Returns:
+        A confirmation string including the new Topic ID, or a clean error.
+    """
+    import random
+
+    log_tool_call("create_forum_topic", chat_id=chat_id, title=title)
+    try:
+        if not title or not title.strip():
+            return "Cannot create forum topic: title must be a non-empty string."
+
+        entity = await client.get_entity(chat_id)
+
+        # Precondition 1: must be a supergroup (megagroup Channel).
+        if not isinstance(entity, Channel) or not getattr(entity, "megagroup", False):
+            return (
+                "Cannot create forum topic: the target is not a supergroup. Forum "
+                "topics exist only on a forum-enabled supergroup."
+            )
+
+        # Precondition 2: forum topics must be enabled on the supergroup.
+        if not getattr(entity, "forum", False):
+            return (
+                "Cannot create forum topic: this supergroup does not have forum "
+                "topics enabled. Enable them first with toggle_forum."
+            )
+
+        input_peer = await client.get_input_entity(entity)
+        result = await client(
+            functions.messages.CreateForumTopicRequest(
+                peer=input_peer,
+                title=title,
+                random_id=random.randint(0, 2**63 - 1),
+            )
+        )
+
+        # The service message announcing the topic creation carries the topic id
+        # (its message id IS the topic id). Fall back to UpdateMessageID.
+        topic_id = None
+        for upd in getattr(result, "updates", None) or []:
+            msg = getattr(upd, "message", None)
+            if msg is not None and isinstance(
+                getattr(msg, "action", None), types.MessageActionTopicCreate
+            ):
+                topic_id = msg.id
+                break
+        if topic_id is None:
+            for upd in getattr(result, "updates", None) or []:
+                if isinstance(upd, types.UpdateMessageID):
+                    topic_id = upd.id
+                    break
+
+        if topic_id is None:
+            return (
+                f"Forum topic '{title}' created in chat {chat_id}, but the new "
+                "Topic ID could not be determined from the response."
+            )
+
+        return (
+            f"Forum topic '{title}' created in chat {chat_id} with Topic ID: {topic_id}."
+        )
+    except Exception as e:
+        logger.exception(
+            f"create_forum_topic failed (chat_id={chat_id}, title='{title}')"
+        )
+        return log_and_format_error(
+            "create_forum_topic", e, chat_id=chat_id, title=title
+        )
+
+
 @mcp.tool(annotations=ToolAnnotations(title="List Chats", openWorldHint=True, readOnlyHint=True))
 async def list_chats(chat_type: str = None, limit: int = 20) -> str:
     """
