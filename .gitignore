@@ -17,6 +17,10 @@ __pycache__/
 venv/
 build/
 dist/
+.pytest_cache/
+
+# Runtime log written by main.py's logger (also created when tests import main)
+mcp_errors.log
 
 # Node (defensive, in case tooling added)
 node_modules/

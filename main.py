@@ -1328,26 +1328,35 @@ async def get_chat(chat_id: Union[int, str]) -> str:
             result.append(f"Bot: {'Yes' if entity.bot else 'No'}")
             result.append(f"Verified: {'Yes' if entity.verified else 'No'}")
 
-        # Get last activity if it's a dialog
+        # Get unread count + last message for THIS specific peer.
+        # NB: do NOT use client.get_dialogs(limit=1, offset_peer=entity) here.
+        # `offset_peer` is a PAGINATION CURSOR, not a filter — with offset_id=0 and
+        # no offset_date it is treated as empty, so get_dialogs returns the single
+        # globally most-recent dialog (often an unrelated chat, e.g. the caller's own
+        # active topic), NOT the requested peer. That produced a wrong "Last Message"
+        # (echoing another chat) and a bogus unread count. GetPeerDialogsRequest
+        # resolves the dialog for the exact peer; the last message is then fetched via
+        # the same per-peer path get_messages uses (so the sender is fully resolved).
         try:
-            # Using get_dialogs might be slow if there are many dialogs
-            # Alternative: Get entity again via get_dialogs if needed for unread count
-            dialog = await client.get_dialogs(limit=1, offset_id=0, offset_peer=entity)
-            if dialog:
-                dialog = dialog[0]
+            peer_dialogs = await client(
+                functions.messages.GetPeerDialogsRequest(peers=[entity])
+            )
+            if peer_dialogs.dialogs:
+                dialog = peer_dialogs.dialogs[0]
                 result.append(f"Unread Messages: {dialog.unread_count}")
-                if dialog.message:
-                    last_msg = dialog.message
-                    sender_name = "Unknown"
-                    if last_msg.sender:
-                        sender_name = getattr(last_msg.sender, "first_name", "") or getattr(
-                            last_msg.sender, "title", "Unknown"
-                        )
-                        if hasattr(last_msg.sender, "last_name") and last_msg.sender.last_name:
-                            sender_name += f" {last_msg.sender.last_name}"
-                    sender_name = sender_name.strip() or "Unknown"
-                    result.append(f"Last Message: From {sender_name} at {last_msg.date}")
-                    result.append(f"Message: {last_msg.message or '[Media/No text]'}")
+                if dialog.top_message:
+                    last_msg = await client.get_messages(entity, ids=dialog.top_message)
+                    if last_msg:
+                        sender_name = "Unknown"
+                        if last_msg.sender:
+                            sender_name = getattr(last_msg.sender, "first_name", "") or getattr(
+                                last_msg.sender, "title", "Unknown"
+                            )
+                            if hasattr(last_msg.sender, "last_name") and last_msg.sender.last_name:
+                                sender_name += f" {last_msg.sender.last_name}"
+                        sender_name = sender_name.strip() or "Unknown"
+                        result.append(f"Last Message: From {sender_name} at {last_msg.date}")
+                        result.append(f"Message: {last_msg.message or '[Media/No text]'}")
         except Exception as diag_ex:
             logger.warning(f"Could not get dialog info for {chat_id}: {diag_ex}")
             pass

@@ -64,4 +64,9 @@ exclude = [
 dev = [
     "black>=25.9.0",
     "flake8>=7.3.0",
+    "pytest>=8.0.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
