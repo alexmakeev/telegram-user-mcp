@@ -3805,14 +3805,16 @@ async def get_message_reactions(
         limit: Maximum number of reactors to return (default: 50)
     """
     try:
-        from telethon.tl.types import ReactionEmoji, ReactionCustomEmoji
+        from telethon.tl.types import ReactionEmoji, ReactionCustomEmoji, ReactionPaid
 
         def emoji_of(reaction):
             if isinstance(reaction, ReactionEmoji):
                 return reaction.emoticon
             if isinstance(reaction, ReactionCustomEmoji):
                 return f"custom:{reaction.document_id}"
-            return None
+            if isinstance(reaction, ReactionPaid):
+                return "paid"
+            return f"unknown:{type(reaction).__name__}"
 
         peer = await client.get_input_entity(chat_id)
         message = await client.get_messages(peer, ids=message_id)
@@ -3840,8 +3842,8 @@ async def get_message_reactions(
                 }
                 for r in result.reactions
             ]
-        except RPCError as e:
-            output["reactors_unavailable"] = f"Telegram refused the who-reacted list: {type(e).__name__}"
+        except (RPCError, OSError, asyncio.TimeoutError) as e:
+            output["reactors_unavailable"] = f"Who-reacted list unavailable: {type(e).__name__}"
 
         return json.dumps(output, indent=2, default=json_serializer)
     except Exception as e:

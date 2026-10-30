@@ -9,6 +9,8 @@ import asyncio
 import json
 from datetime import datetime
 
+import pytest
+
 from telethon import functions
 from telethon.errors import MsgIdInvalidError
 from telethon.tl.types import (
@@ -16,7 +18,9 @@ from telethon.tl.types import (
     MessageReactions,
     PeerUser,
     ReactionCount,
+    ReactionCustomEmoji,
     ReactionEmoji,
+    ReactionPaid,
 )
 
 import main
@@ -66,13 +70,21 @@ def _broken_heart_message():
     )
 
 
-def test_counts_returned_when_who_reacted_list_refused():
-    out = _run(StubClient(_broken_heart_message(), list_error=MsgIdInvalidError(request=None)))
+@pytest.mark.parametrize(
+    "error, name",
+    [
+        (MsgIdInvalidError(request=None), "MsgIdInvalidError"),
+        (asyncio.TimeoutError(), "TimeoutError"),
+        (ConnectionError("reset"), "ConnectionError"),
+    ],
+)
+def test_counts_returned_when_who_reacted_list_unavailable(error, name):
+    out = _run(StubClient(_broken_heart_message(), list_error=error))
     assert "GEN-ERR" not in out, out
     data = json.loads(out)
     assert data["counts"] == {"💔": 1}, data
     assert "reactors" not in data, data
-    assert "MsgIdInvalidError" in data["reactors_unavailable"], data
+    assert name in data["reactors_unavailable"], data
 
 
 def test_counts_and_reactors_when_list_available():
@@ -101,3 +113,33 @@ def test_no_reactions_on_message_is_stated():
 def test_missing_message_is_stated():
     out = _run(StubClient(None))
     assert out == f"Message {MSG_ID} not found in chat {CHAT_ID}."
+
+
+def test_programming_error_in_enrichment_is_not_swallowed():
+    out = _run(StubClient(_broken_heart_message(), list_error=AttributeError("bug")))
+    assert "GEN-ERR" in out, out
+
+
+class ReactionFuture:
+    pass
+
+
+def test_unsupported_reaction_types_keyed_stably():
+    message = FakeMessage(
+        MessageReactions(
+            results=[
+                ReactionCount(reaction=ReactionEmoji("💔"), count=1),
+                ReactionCount(reaction=ReactionCustomEmoji(document_id=5), count=2),
+                ReactionCount(reaction=ReactionPaid(), count=3),
+                ReactionCount(reaction=ReactionFuture(), count=4),
+            ]
+        )
+    )
+    out = _run(StubClient(message, list_error=MsgIdInvalidError(request=None)))
+    data = json.loads(out)
+    assert data["counts"] == {
+        "💔": 1,
+        "custom:5": 2,
+        "paid": 3,
+        "unknown:ReactionFuture": 4,
+    }, data
