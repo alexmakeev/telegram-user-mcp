@@ -37,6 +37,7 @@ _mcp_sse_module.EventSourceResponse = _PingEventSourceResponse  # type: ignore[a
 
 from telethon import TelegramClient, events, functions, types, utils
 from telethon.sessions import StringSession
+from telethon.errors import RPCError
 from telethon.tl.types import (
     User,
     Chat,
@@ -3796,56 +3797,53 @@ async def get_message_reactions(
     limit: int = 50,
 ) -> str:
     """
-    Get the list of reactions on a message.
+    Get the reactions on a message: per-emoji counts, plus who reacted when Telegram allows it.
 
     Args:
         chat_id: The chat ID or username
         message_id: The message ID to get reactions from
-        limit: Maximum number of users to return per reaction (default: 50)
+        limit: Maximum number of reactors to return (default: 50)
     """
     try:
         from telethon.tl.types import ReactionEmoji, ReactionCustomEmoji
 
+        def emoji_of(reaction):
+            if isinstance(reaction, ReactionEmoji):
+                return reaction.emoticon
+            if isinstance(reaction, ReactionCustomEmoji):
+                return f"custom:{reaction.document_id}"
+            return None
+
         peer = await client.get_input_entity(chat_id)
-
-        result = await client(
-            functions.messages.GetMessageReactionsListRequest(
-                peer=peer,
-                id=message_id,
-                limit=limit,
-            )
-        )
-
-        if not result.reactions:
+        message = await client.get_messages(peer, ids=message_id)
+        if message is None:
+            return f"Message {message_id} not found in chat {chat_id}."
+        if not message.reactions or not message.reactions.results:
             return f"No reactions on message {message_id} in chat {chat_id}."
 
-        reactions_data = []
-        for reaction in result.reactions:
-            user_id = reaction.peer_id.user_id if hasattr(reaction.peer_id, "user_id") else None
-            emoji = None
-            if isinstance(reaction.reaction, ReactionEmoji):
-                emoji = reaction.reaction.emoticon
-            elif isinstance(reaction.reaction, ReactionCustomEmoji):
-                emoji = f"custom:{reaction.reaction.document_id}"
+        counts = {emoji_of(rc.reaction): rc.count for rc in message.reactions.results}
 
-            reactions_data.append(
-                {
-                    "user_id": user_id,
-                    "emoji": emoji,
-                    "date": reaction.date.isoformat() if reaction.date else None,
-                }
+        output = {"message_id": message_id, "chat_id": str(chat_id), "counts": counts}
+        try:
+            result = await client(
+                functions.messages.GetMessageReactionsListRequest(
+                    peer=peer,
+                    id=message_id,
+                    limit=limit,
+                )
             )
+            output["reactors"] = [
+                {
+                    "user_id": getattr(r.peer_id, "user_id", None),
+                    "emoji": emoji_of(r.reaction),
+                    "date": r.date.isoformat() if r.date else None,
+                }
+                for r in result.reactions
+            ]
+        except RPCError as e:
+            output["reactors_unavailable"] = f"Telegram refused the who-reacted list: {type(e).__name__}"
 
-        return json.dumps(
-            {
-                "message_id": message_id,
-                "chat_id": str(chat_id),
-                "reactions": reactions_data,
-                "count": len(reactions_data),
-            },
-            indent=2,
-            default=json_serializer,
-        )
+        return json.dumps(output, indent=2, default=json_serializer)
     except Exception as e:
         logger.exception(
             f"get_message_reactions failed (chat_id={chat_id}, message_id={message_id})"
