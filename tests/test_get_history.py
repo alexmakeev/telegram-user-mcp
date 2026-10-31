@@ -47,3 +47,17 @@ def test_without_topic_id_reads_whole_chat():
     stub = StubClient()
     _run(stub, limit=5)
     assert stub.calls == [{"limit": 5}]
+
+
+def test_general_topic_one_is_forwarded():
+    stub = StubClient()
+    _run(stub, limit=5, topic_id=1)
+    assert stub.calls == [{"limit": 5, "reply_to": 1}]
+
+
+def test_invalid_topic_id_is_refused_before_any_read():
+    for bad in (0, -1, True, "7"):
+        stub = StubClient()
+        out = _run(stub, topic_id=bad)
+        assert out.startswith("Invalid topic_id")
+        assert stub.calls == []

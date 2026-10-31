@@ -3514,9 +3514,18 @@ async def get_history(
     """
     Get chat history (up to limit). With topic_id, only that forum topic's messages.
     """
+    if topic_id is not None and (type(topic_id) is not int or topic_id < 1):
+        error_msg = f"Invalid topic_id: {topic_id!r}. Must be a positive integer topic root id."
+        return log_and_format_error(
+            "get_history",
+            ValidationError(error_msg),
+            prefix="VALIDATION-001",
+            user_message=error_msg,
+            topic_id=topic_id,
+        )
     try:
         entity = await client.get_entity(chat_id)
-        topic_filter = {} if topic_id is None else {"reply_to": topic_id}
+        topic_filter = {"reply_to": topic_id} if topic_id is not None else {}
         messages = await client.get_messages(entity, limit=limit, **topic_filter)
 
         lines = []
