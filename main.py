@@ -3508,13 +3508,16 @@ async def set_bot_commands(bot_username: str, commands: list) -> str:
 
 @mcp.tool(annotations=ToolAnnotations(title="Get History", openWorldHint=True, readOnlyHint=True))
 @validate_id("chat_id")
-async def get_history(chat_id: Union[int, str], limit: int = 100) -> str:
+async def get_history(
+    chat_id: Union[int, str], limit: int = 100, topic_id: Optional[int] = None
+) -> str:
     """
-    Get full chat history (up to limit).
+    Get chat history (up to limit). With topic_id, only that forum topic's messages.
     """
     try:
         entity = await client.get_entity(chat_id)
-        messages = await client.get_messages(entity, limit=limit)
+        topic_filter = {} if topic_id is None else {"reply_to": topic_id}
+        messages = await client.get_messages(entity, limit=limit, **topic_filter)
 
         lines = []
         for msg in messages:
@@ -3527,7 +3530,7 @@ async def get_history(chat_id: Union[int, str], limit: int = 100) -> str:
             )
         return "\n".join(lines)
     except Exception as e:
-        return log_and_format_error("get_history", e, chat_id=chat_id, limit=limit)
+        return log_and_format_error("get_history", e, chat_id=chat_id, limit=limit, topic_id=topic_id)
 
 
 @mcp.tool(
